@@ -76,19 +76,20 @@ DD = dd conv=notrunc
 # such as all of the dependencies needed to mount the root partition.
 # We can also include things like the debug shell...
 # Note that ordering matters - list dependencies first.
-BOOT_MODULES := zero random serial
-BOOT_MODULES += procfs tmpfs ata
+BOOT_MODULES :=
+#BOOT_MODULES := zero random serial
+#BOOT_MODULES += procfs tmpfs ata
 #BOOT_MODULES += dospart
-BOOT_MODULES += ext2
-BOOT_MODULES += debug_shell
-BOOT_MODULES += ps2mouse ps2kbd
-BOOT_MODULES += lfbvideo
-BOOT_MODULES += vidset
-BOOT_MODULES += packetfs
-BOOT_MODULES += snd
-BOOT_MODULES += pcspkr
-BOOT_MODULES += ac97
-BOOT_MODULES += net rtl
+#BOOT_MODULES += ext2
+#BOOT_MODULES += debug_shell
+#BOOT_MODULES += ps2mouse ps2kbd
+#BOOT_MODULES += lfbvideo
+#BOOT_MODULES += vidset
+#BOOT_MODULES += packetfs
+#BOOT_MODULES += snd
+#BOOT_MODULES += pcspkr
+#BOOT_MODULES += ac97
+#BOOT_MODULES += net rtl
 
 # This is kinda silly. We're going to form an -initrd argument..
 # which is basically -initrd "hdd/mod/%.ko,hdd/mod/%.ko..."
@@ -101,15 +102,16 @@ BOOT_MODULES_X = -initrd "$(subst $(SPACE),$(COMMA),$(foreach mod,$(BOOT_MODULES
 # Emulator settings
 EMU = qemu-system-i386
 EMUARGS  = -sdl -kernel toaruos-kernel -m 1024
-EMUARGS += -serial stdio -vga std
-EMUARGS += -hda toaruos-disk.img -k en-us -no-frame
-EMUARGS += -rtc base=localtime -net nic,model=rtl8139 -net user -soundhw pcspk,ac97
-EMUARGS += -net dump -no-kvm-irqchip
-EMUARGS += $(BOOT_MODULES_X)
+#EMUARGS += -serial stdio -vga std
+#EMUARGS += -hda toaruos-disk.img -k en-us -no-frame
+#EMUARGS += -rtc base=localtime -net nic,model=rtl8139 -net user -soundhw pcspk,ac97
+#EMUARGS += -net dump -no-kvm-irqchip
+#EMUARGS += $(BOOT_MODULES_X)
 EMUKVM   = -enable-kvm
 
 DISK_ROOT = root=/dev/hda
-VID_QEMU  = vid=qemu,,1280,,720
+#VID_QEMU  = vid=qemu,,1280,,720
+VID_QEM :=
 START_VGA = start=--vga
 START_SINGLE = start=--single
 START_LIVE = start=live-welcome

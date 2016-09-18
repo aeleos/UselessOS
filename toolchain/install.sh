@@ -9,27 +9,27 @@ BUILD_BINUTILS=true
 BUILD_GCC=true
 BUILD_NEWLIB=true
 BUILD_LIBSTDCPP=true
-BUILD_ZLIB=true
-BUILD_FREETYPE=true
-BUILD_PNG=true
-BUILD_PIXMAN=true
-BUILD_CAIRO=true
-BUILD_MESA=true
-BUILD_NCURSES=true
-BUILD_VIM=true
+#BUILD_ZLIB=true
+#BUILD_FREETYPE=true
+#BUILD_PNG=true
+#BUILD_PIXMAN=true
+#BUILD_CAIRO=true
+#BUILD_MESA=true
+#BUILD_NCURSES=true
+#BUILD_VIM=true
 
 #BUILD_BINUTILS=false
 #BUILD_GCC=false
 #BUILD_NEWLIB=false
 #BUILD_LIBSTDCPP=false
-#BUILD_ZLIB=false
-#BUILD_FREETYPE=false
-#BUILD_PNG=false
-#BUILD_PIXMAN=false
-#BUILD_CAIRO=false
-#BUILD_MESA=false
-#BUILD_NCURSES=false
-#BUILD_VIM=false
+BUILD_ZLIB=false
+BUILD_FREETYPE=false
+BUILD_PNG=false
+BUILD_PIXMAN=false
+BUILD_CAIRO=false
+BUILD_MESA=false
+BUILD_NCURSES=false
+BUILD_VIM=false
 
 echo "Building a toolchain with a sysroot of $TOARU_SYSROOT with host binaries in $PREFIX targeting $TARGET"
 
