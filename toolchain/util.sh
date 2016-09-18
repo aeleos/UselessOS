@@ -29,8 +29,8 @@ function patc () {
 }
 
 function installNewlibStuff () {
-    cp -r ../patches/newlib/toaru $1/newlib/libc/sys/toaru
-    cp -r ../patches/newlib/include/* $1/newlib/libc/sys/toaru/
+    cp -r ../patches/newlib/useless $1/newlib/libc/sys/useless
+    cp -r ../patches/newlib/include/* $1/newlib/libc/sys/useless/
     cp -r ../patches/newlib/setjmp.S $1/newlib/libc/machine/i386/setjmp.S
     cp -r ../patches/newlib/wcwidth.c $1/newlib/libc/string/wcwidth.c
     cp -r ../patches/newlib/wcswidth.c $1/newlib/libc/string/wcswidth.c

@@ -93,7 +93,7 @@ DEFN_SYSCALL2(symlink, SYS_SYMLINK, char *, char *);
 DEFN_SYSCALL3(readlink, SYS_READLINK, char *, char *, int);
 DEFN_SYSCALL2(lstat, SYS_LSTAT, char *, void *);
 
-static int toaru_debug_stubs_enabled(void) {
+static int useless_debug_stubs_enabled(void) {
 	static int checked = 0;
 	static int enabled = 0;
 	if (!checked) {
@@ -107,7 +107,7 @@ static int toaru_debug_stubs_enabled(void) {
 }
 
 #define DEBUG_STUB(...) \
-	if (toaru_debug_stubs_enabled()) { \
+	if (useless_debug_stubs_enabled()) { \
 		fprintf(stderr, "\033[1;32mUserspace Debug\033[0m pid%d ", getpid()); fprintf(stderr, __VA_ARGS__); \
 	}
 

@@ -7,11 +7,11 @@ endif
 
 
 # We always build with our targetted cross-compiler
-CC = i686-pc-toaru-gcc
-NM = i686-pc-toaru-nm
-CXX= i686-pc-toaru-g++
-AR = i686-pc-toaru-ar
-AS = i686-pc-toaru-as
+CC = i686-pc-useless-gcc
+NM = i686-pc-useless-nm
+CXX= i686-pc-useless-g++
+AR = i686-pc-useless-ar
+AS = i686-pc-useless-as
 
 # Build flags
 CFLAGS  = -O2 -std=c99
@@ -101,9 +101,9 @@ BOOT_MODULES_X = -initrd "$(subst $(SPACE),$(COMMA),$(foreach mod,$(BOOT_MODULES
 
 # Emulator settings
 EMU = qemu-system-i386
-EMUARGS  = -sdl -kernel toaruos-kernel -m 1024
+EMUARGS  = -sdl -kernel uselessos-kernel -m 1024
 #EMUARGS += -serial stdio -vga std
-#EMUARGS += -hda toaruos-disk.img -k en-us -no-frame
+#EMUARGS += -hda uselessos-disk.img -k en-us -no-frame
 #EMUARGS += -rtc base=localtime -net nic,model=rtl8139 -net user -soundhw pcspk,ac97
 #EMUARGS += -net dump -no-kvm-irqchip
 #EMUARGS += $(BOOT_MODULES_X)
@@ -117,7 +117,7 @@ START_SINGLE = start=--single
 START_LIVE = start=live-welcome
 WITH_LOGS = logtoserial=1
 
-.PHONY: all system install test toolchain userspace modules cdrom toaruos.iso cdrom-big toaruos-big.iso
+.PHONY: all system install test toolchain userspace modules cdrom uselessos.iso cdrom-big uselessos-big.iso
 .PHONY: clean clean-soft clean-hard clean-user clean-mods clean-core clean-disk clean-once
 .PHONY: run vga term headless
 .PHONY: kvm vga-kvm term-kvm headless-kvm quick
@@ -130,7 +130,7 @@ WITH_LOGS = logtoserial=1
 .SUFFIXES:
 
 all: system tags
-system: toaruos-disk.img toaruos-kernel
+system: uselessos-disk.img uselessos-kernel
 userspace: ${USERSPACE}
 modules: ${MODULES}
 
@@ -179,17 +179,17 @@ KERNEL_ASMOBJS = $(filter-out kernel/symbols.o,$(patsubst %.S,%.o,$(wildcard ker
 ################
 #    Kernel    #
 ################
-toaruos-kernel: ${KERNEL_ASMOBJS} ${KERNEL_OBJS} kernel/symbols.o
+uselessos-kernel: ${KERNEL_ASMOBJS} ${KERNEL_OBJS} kernel/symbols.o
 	@${BEG} "CC" "$<"
-	@${CC} -T kernel/link.ld ${CFLAGS} -nostdlib -o toaruos-kernel ${KERNEL_ASMOBJS} ${KERNEL_OBJS} kernel/symbols.o -lgcc ${ERRORS}
+	@${CC} -T kernel/link.ld ${CFLAGS} -nostdlib -o uselessos-kernel ${KERNEL_ASMOBJS} ${KERNEL_OBJS} kernel/symbols.o -lgcc ${ERRORS}
 	@${END} "CC" "$<"
 	@${INFO} "--" "Kernel is ready!"
 
 kernel/symbols.o: ${KERNEL_ASMOBJS} ${KERNEL_OBJS} util/generate_symbols.py
 	@-rm -f kernel/symbols.o
 	@${BEG} "NM" "Generating symbol list..."
-	@${CC} -T kernel/link.ld ${CFLAGS} -nostdlib -o toaruos-kernel ${KERNEL_ASMOBJS} ${KERNEL_OBJS} -lgcc ${ERRORS}
-	@${NM} toaruos-kernel -g | python2 util/generate_symbols.py > kernel/symbols.S
+	@${CC} -T kernel/link.ld ${CFLAGS} -nostdlib -o uselessos-kernel ${KERNEL_ASMOBJS} ${KERNEL_OBJS} -lgcc ${ERRORS}
+	@${NM} uselessos-kernel -g | python2 util/generate_symbols.py > kernel/symbols.S
 	@${END} "NM" "Generated symbol list."
 	@${BEG} "AS" "kernel/symbols.S"
 	@${AS} ${ASFLAGS} kernel/symbols.S -o $@ ${ERRORS}
@@ -240,21 +240,21 @@ $1: $2 $(shell util/auto-dep.py --deps $2)
 endef
 $(foreach file,$(USER_CXXFILES),$(eval $(call user-cxx-rule,$(patsubst %.c++,hdd/bin/%,$(notdir ${file})),${file})))
 
-hdd/usr/lib/libtoaru.a: ${CORE_LIBS}
+hdd/usr/lib/libuseless.a: ${CORE_LIBS}
 	@${BEG} "AR" "$@"
 	@${AR} rcs $@ ${CORE_LIBS}
-	@mkdir -p hdd/usr/include/toaru
-	@cp userspace/lib/*.h hdd/usr/include/toaru/
+	@mkdir -p hdd/usr/include/useless
+	@cp userspace/lib/*.h hdd/usr/include/useless/
 	@${END} "AR" "$@"
 
 ####################
 # Hard Disk Images #
 ####################
 
-toaruos-disk.img: ${USERSPACE} util/devtable
+uselessos-disk.img: ${USERSPACE} util/devtable
 	@${BEG} "hdd" "Generating a Hard Disk image..."
-	@-rm -f toaruos-disk.img
-	@${GENEXT} -B 4096 -d hdd -D util/devtable -U -b ${DISK_SIZE} -N 4096 toaruos-disk.img ${ERRORS}
+	@-rm -f uselessos-disk.img
+	@${GENEXT} -B 4096 -d hdd -D util/devtable -U -b ${DISK_SIZE} -N 4096 uselessos-disk.img ${ERRORS}
 	@${END} "hdd" "Generated Hard Disk image"
 	@${INFO} "--" "Hard disk image is ready!"
 
@@ -262,14 +262,14 @@ toaruos-disk.img: ${USERSPACE} util/devtable
 # cdrom #
 #########
 
-cdrom: toaruos.iso
+cdrom: uselessos.iso
 
-cdrom-big: toaruos-big.iso
+cdrom-big: uselessos-big.iso
 
-toaruos.iso:
+uselessos.iso:
 	util/make-cdrom.sh
 
-toaruos-big.iso:
+uselessos-big.iso:
 	util/make-cdrom-big.sh
 
 ##############
@@ -303,12 +303,12 @@ clean-mods:
 
 clean-core:
 	@${BEGRM} "RM" "Cleaning final output..."
-	@-rm -f toaruos-kernel
+	@-rm -f uselessos-kernel
 	@${ENDRM} "RM" "Cleaned final output"
 
 clean-disk:
 	@${BEGRM} "RM" "Deleting hard disk image..."
-	@-rm -f toaruos-disk.img
+	@-rm -f uselessos-disk.img
 	@${ENDRM} "RM" "Deleted hard disk image"
 
 clean: clean-soft clean-core
