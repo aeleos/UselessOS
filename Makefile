@@ -127,8 +127,8 @@ WITH_LOGS = logtoserial=1
 # Disable built-in rules
 .SUFFIXES:
 
-all: system tags userspace
-system: toaruos-disk.img toaruos-kernel modules
+all: system tags
+system: toaruos-disk.img toaruos-kernel
 userspace: ${USERSPACE}
 modules: ${MODULES}
 
