@@ -26,19 +26,20 @@ ASFLAGS = --32
 CFLAGS += -DKERNEL_GIT_TAG=`util/make-version`
 
 # We have some pieces of assembly sitting around as well...
-YASM = yasm
+NASM = nasm
+NASM_FLAGS = -f elf -F dwarf
 
 # All of the core parts of the kernel are built directly.
-KERNEL_OBJS = $(patsubst %.c,%.o,$(wildcard kernel/*.c))
-KERNEL_OBJS += $(patsubst %.c,%.o,$(wildcard kernel/*/*.c))
-KERNEL_OBJS += $(patsubst %.c,%.o,$(wildcard kernel/*/*/*.c))
+KERNEL_OBJS = $(patsubst %.c,%.o,$(wildcard src/kernel/*.c))
+KERNEL_OBJS += $(patsubst %.c,%.o,$(wildcard src/kernel/*/*.c))
+KERNEL_OBJS += $(patsubst %.c,%.o,$(wildcard src/kernel/*/*/*.c))
 
 # Loadable modules
 MODULES = $(patsubst modules/%.c,hdd/mod/%.ko,$(wildcard modules/*.c))
 
 # We also want to rebuild when a header changes.
 # This is a naive approach, but it works...
-HEADERS     = $(shell find kernel/include/ -type f -name '*.h')
+KERNEL_HEADERS     = $(shell find include/kernel/ -type f -name '*.h')
 
 # Userspace build flags
 USER_CFLAGS   = -O3 -m32 -Wa,--32 -g -Iuserspace -std=c99 -U__STRICT_ANSI__
@@ -174,42 +175,54 @@ test: system
 toolchain:
 	@cd toolchain; ./toolchain-build.sh
 
-KERNEL_ASMOBJS = $(filter-out kernel/symbols.o,$(patsubst %.S,%.o,$(wildcard kernel/*.S)))
+KERNEL_ASMOBJS = $(filter-out src/kernel/symbols.o,$(patsubst %.s,%.o,$(wildcard src/kernel/*.s)))
+KERNEL_ASMOBJS += $(filter-out src/kernel/symbols.o, $(patsubst %.s,%.o,$(wildcard src/kernel/*/*.s)))
+KERNEL_ASMOBJS += $(filter-out src/kernel/symbols.o, $(patsubst %.s,%.o,$(wildcard src/kernel/*/*/*.s)))
+
+KERNEL_NASMOBJS = $(filter-out src/kernel/symbols.o,$(patsubst %.asm,%.o,$(wildcard src/kernel/*.asm)))
+KERNEL_NASMOBJS += $(filter-out src/kernel/symbols.o, $(patsubst %.asm,%.o,$(wildcard src/kernel/*/*.asm)))
+KERNEL_NASMOBJS += $(filter-out src/kernel/symbols.o, $(patsubst %.asm,%.o,$(wildcard src/kernel/*/*/*.asm)))
+
 
 ################
 #    Kernel    #
 ################
-uselessos-kernel: ${KERNEL_ASMOBJS} ${KERNEL_OBJS} kernel/symbols.o
+uselessos-kernel: ${KERNEL_ASMOBJS} ${KERNEL_NASMOBJS} ${KERNEL_OBJS} src/kernel/symbols.o
 	@${BEG} "CC" "$<"
-	@${CC} -T kernel/link.ld ${CFLAGS} -nostdlib -o uselessos-kernel ${KERNEL_ASMOBJS} ${KERNEL_OBJS} kernel/symbols.o -lgcc ${ERRORS}
+	@${CC} -T src/kernel/link.ld ${CFLAGS} -nostdlib -o uselessos-kernel ${KERNEL_ASMOBJS} ${KERNEL_NASMOBJS} ${KERNEL_OBJS} src/kernel/symbols.o -lgcc ${ERRORS}
 	@${END} "CC" "$<"
 	@${INFO} "--" "Kernel is ready!"
 
-kernel/symbols.o: ${KERNEL_ASMOBJS} ${KERNEL_OBJS} util/generate_symbols.py
-	@-rm -f kernel/symbols.o
+src/kernel/symbols.o: ${KERNEL_ASMOBJS} ${KERNEL_NASMOBJS} ${KERNEL_OBJS} util/generate_symbols.py
+	@-rm -f src/kernel/symbols.o
 	@${BEG} "NM" "Generating symbol list..."
-	@${CC} -T kernel/link.ld ${CFLAGS} -nostdlib -o uselessos-kernel ${KERNEL_ASMOBJS} ${KERNEL_OBJS} -lgcc ${ERRORS}
-	@${NM} uselessos-kernel -g | python2 util/generate_symbols.py > kernel/symbols.S
+	@${CC} -T src/kernel/link.ld ${CFLAGS} -nostdlib -o uselessos-kernel ${KERNEL_ASMOBJS} ${KERNEL_NASMOBJS} ${KERNEL_OBJS} -lgcc ${ERRORS}
+	@${NM} uselessos-kernel -g | python2 util/generate_symbols.py > src/kernel/symbols.s
 	@${END} "NM" "Generated symbol list."
-	@${BEG} "AS" "kernel/symbols.S"
-	@${AS} ${ASFLAGS} kernel/symbols.S -o $@ ${ERRORS}
-	@${END} "AS" "kernel/symbols.S"
+	@${BEG} "AS" "kernel/symbols.s"
+	@${AS} ${ASFLAGS} src/kernel/symbols.s -o $@ ${ERRORS}
+	@${END} "AS" "kernel/symbols.s"
 
-kernel/sys/version.o: kernel/*/*.c kernel/*.c
+src/kernel/sys/version.o: src/kernel/*/*.c src/kernel/*.c
 
-hdd/mod/%.ko: modules/%.c ${HEADERS}
+hdd/mod/%.ko: modules/%.c ${KERNEL_HEADERS}
 	@${BEG} "CC" "$< [module]"
-	@${CC} -T modules/link.ld -I./kernel/include -nostdlib ${CFLAGS} -c -o $@ $< ${ERRORS}
+	@${CC} -T modules/link.ld -I./include/kernel -nostdlib ${CFLAGS} -c -o $@ $< ${ERRORS}
 	@${END} "CC" "$< [module]"
 
-kernel/%.o: kernel/%.S
+src/kernel/%.o: src/kernel/%.s
 	@${BEG} "AS" "$<"
 	@${AS} ${ASFLAGS} $< -o $@ ${ERRORS}
 	@${END} "AS" "$<"
 
-kernel/%.o: kernel/%.c ${HEADERS}
+src/kernel/%.o: src/kernel/%.asm
+	@${BEG} "AS" "$<"
+	@${NASM} $< ${NASM_FLAGS} -o $@ ${ERRORS}
+	@${END} "AS" "$<"
+
+src/kernel/%.o: src/kernel/%.c ${KERNEL_HEADERS}
 	@${BEG} "CC" "$<"
-	@${CC} ${CFLAGS} -nostdlib -g -I./kernel/include -c -o $@ $< ${ERRORS}
+	@${CC} ${CFLAGS} -nostdlib -g -I./include/kernel -c -o $@ $< ${ERRORS}
 	@${END} "CC" "$<"
 
 #############
@@ -275,9 +288,14 @@ uselessos-big.iso:
 ##############
 #    ctags   #
 ##############
-tags: kernel/*/*.c kernel/*.c userspace/**/*.c modules/*.c
+# tags: src/kernel/*/*.c src/kernel/*.c userspace/**/*.c modules/*.c
+# 	@${BEG} "ctag" "Generating CTags..."
+# 	@-ctags -R --c++-kinds=+p --fields=+iaS --extra=+q kernel userspace modules util ${ERRORS}
+# 	@${END} "ctag" "Generated CTags."
+
+tags: src/kernel/*.c
 	@${BEG} "ctag" "Generating CTags..."
-	@-ctags -R --c++-kinds=+p --fields=+iaS --extra=+q kernel userspace modules util ${ERRORS}
+	@-ctags -R --c++-kinds=+p --fields=+iaS --extra=+q src/kernel util ${ERRORS}
 	@${END} "ctag" "Generated CTags."
 
 ###############
@@ -286,8 +304,8 @@ tags: kernel/*/*.c kernel/*.c userspace/**/*.c modules/*.c
 
 clean-soft:
 	@${BEGRM} "RM" "Cleaning kernel objects..."
-	@-rm -f kernel/*.o
-	@-rm -f kernel/*/*.o
+	@-rm -f src/kernel/*.o
+	@-rm -f src/kernel/*/*.o
 	@-rm -f ${KERNEL_OBJS}
 	@${ENDRM} "RM" "Cleaned kernel objects"
 

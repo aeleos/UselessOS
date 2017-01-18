@@ -35,8 +35,8 @@ stack_top:
 .global start
 .type start, @function
 
-.extern kmain
-.type kmain, @function
+.extern kernel_main
+.type kernel_main, @function
 
 start:
     /* Setup our stack */
@@ -51,7 +51,7 @@ start:
 
     /* Disable interrupts and call kernel proper */
     cli
-    call kmain
+    call kernel_main
 
     /* Clear interrupts and hang if we return from kmain */
     cli

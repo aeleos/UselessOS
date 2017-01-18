@@ -1,7 +1,8 @@
-#include <multiboot.h>
+#include <boot/multiboot.h>
 
 
 char *fb = (char *) 0x000B8000;
+uintptr_t initial_esp = 0;
 
 
 void fb_write_cell(unsigned int i, char c, unsigned char fg, unsigned char bg)
@@ -13,10 +14,11 @@ void fb_write_cell(unsigned int i, char c, unsigned char fg, unsigned char bg)
 
 
 
-int kmain(struct multiboot *mboot, uint32_t mboot_mag, uintptr_t esp) {
+int kernel_main(struct multiboot *mboot_ptr, uint32_t mboot_magic, uintptr_t esp) {
+  // initial_esp = esp;
 
   fb_write_cell(0, 'A', 2, 8);
 
 
-
+  return 0;
 }
