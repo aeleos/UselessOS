@@ -64,6 +64,7 @@ static rawcolor make_color(term_color fg, term_color bg);
 static uint16_t make_terminal_entry(char ch, rawcolor color);
 static void update_cursor(term_cursor loc);
 static void term_end_line();
+int terminal_interpret_ansi(char c);
 
 void terminal_initialize(void) {
 	//initialize shared lock
@@ -234,30 +235,25 @@ static void backspace(void) {
 //TODO REWORK THIS
 //IMPORTANT
 //SPAGEHTTI UPSETTI
-static bool matching_color;
-static char col_code[3];
-static int parse_idx;
+static bool was_last_ansi;
 void terminal_putchar(char ch) {
-	// if (ch == KEY_UP || ch == KEY_DOWN) return;  
-
-	if (matching_color) {
-		parse_idx++;
-		if (ch == ';' || parse_idx >= 5) {
-			matching_color = false;
-			term_color col = (term_color)atoi(col_code);
-			terminal_settextcolor(col);
-			return;
-		}
-		if (parse_idx >= 2 && isdigit(ch)) {
-			strccat(col_code, ch);
-		}
-		return;
-	}
-
+	// if (ch == KEY_UP || ch == KEY_DOWN) return;
+  //
+  // if (ch == ']'){
+  //   printf("here");
+  //   putraw(ch);
+  //   return;
+  // }
 	if (!is_scroll_redraw) {
 		//make sure we're at the bottom of the terminal before printing more
 		term_scroll_to_bottom();
 	}
+
+  if (was_last_ansi && ch == ';') {
+    was_last_ansi = false;
+    return;
+  }
+
 
 	switch(ch) {
 		// Newline
@@ -304,17 +300,17 @@ void terminal_putchar(char ch) {
 			}
 			break;
 
-		// Color change
-		case '\e':
-			matching_color = true;
-			//reset temp args for this color switch
-			parse_idx = 0;
-			memset(col_code, 0, 3);
-			return;
-			break;
+
 
 		// Normal characters
 		default:
+      if (terminal_interpret_ansi(ch) || !isprint(ch)) {
+      // printf("ansi");
+        was_last_ansi = true;
+        break;
+      }
+
+      was_last_ansi = false;
 			putraw(ch);
 			break;
 	}
@@ -322,6 +318,136 @@ void terminal_putchar(char ch) {
 	// Update displayed cursor position
 	terminal_updatecursor();
 }
+
+int terminal_interpret_ansi(char c) {
+	typedef enum {
+		normal, bracket, params
+	} state_t;
+
+	static state_t state = normal;     // State tracker
+	static char buf[32] = "";          // Stores the string for 1 param
+	static uint32_t args[32] = { 0 };  // Stores the parsed params
+	static uint32_t current_arg = 0;   // Number of params
+	static uint32_t current_index = 0; // Number of chars in current param
+	static term_cursor saved_cursor;
+	static rawcolor saved_color;
+	static uint8_t saved_menu_color;
+
+
+	if (state == normal) {
+		if (c == 0x1B) { // Escape character
+			state = bracket;
+		}
+		else {
+			return 0;
+		}
+	}
+	else if (state == bracket) {
+		if (c == '[') {
+			state = params;
+		}
+		else {
+			state = normal;
+			return 0;
+		}
+	}
+	else if (state == params) {
+		if (c == ';') {
+			buf[current_index] = '\0';
+			args[current_arg++] = atoi(buf);
+			current_index = 0;
+		}
+		else if (isdigit(c)) {
+			if (current_index >= 32) {
+				current_arg = 0;
+				current_index = 0;
+				state = normal;
+			}
+			else {
+				buf[current_index++] = c;
+			}
+		}
+		else if (isalpha(c)) {
+			buf[current_index] = '\0';
+			args[current_arg++] = atoi(buf);
+
+			switch (c) {
+				case 's': // Save cursor position
+					saved_cursor = g_cursor_pos;
+					state = normal;
+					break;
+				case 'u': // Restore cursor position
+					g_cursor_pos = saved_cursor;
+					state = normal;
+					break;
+				// case 'K': // Erase until the end of line
+				// 	for (uint32_t x = tty_column; x < TERM_WIDTH; x++) {
+				// 		if (args[0]){
+				// 			ENTRY(x, tty_row) = tty_make_entry(' ', tty_menu_color);
+				// 		} else {
+				// 			ENTRY(x, tty_row) = tty_make_entry(' ', tty_color);
+				// 		}
+				// 	}
+				// 	state = normal;
+				// 	break;
+				case 'H':
+					g_cursor_pos.x = args[0];
+					g_cursor_pos.y = args[1];
+					break;
+        case 'x':
+          g_cursor_pos.x = args[0]; break;
+        case 'y':
+          g_cursor_pos.y  = args[0]; break;
+				case 'A': // Cursor up
+					g_cursor_pos.y -= args[0]; break;
+				case 'B': // Cursor down
+					g_cursor_pos.y += args[0]; break;
+				case 'C': // Cursor right
+					g_cursor_pos.x += args[0]; break;
+				case 'D': // Cursor left
+					g_cursor_pos.x -= args[0]; break;
+				case 'J': // 2J: clear screen & reset cursor
+					if (args[0] == 2) {
+						// tty_init();
+					}
+					break;
+			}
+
+			if (c == 'f') { // Set graphics mode
+				for (uint32_t i = 0; i < current_arg; i++) {
+          if (args[i] < 16) terminal_settextcolor((term_color)args[i]);
+				}
+			}
+
+      if (c == 'b') { // Set graphics mode
+        for (uint32_t i = 0; i < current_arg; i++) {
+          if (args[i] < 16) terminal_setbgcolor((term_color)args[i]);
+        }
+      }
+
+      if (c == 'c') { // Set graphics mode
+        for (uint32_t i = 0; i < current_arg; i++) {
+          switch (args[i]) {
+            case 0:
+              //tty_set_blink(0); break;
+              terminal_updatecursor(); break;
+            case 1: saved_color = g_terminal_color; break;//save tty color
+            case 2: g_terminal_color = saved_color; break;//restore tty color
+            // case 3: saved_menu_color = tty_menu_color; saved_color = tty_color; break;//save menu color
+            // case 4: tty_menu_color = saved_menu_color; tty_color = saved_color; break;//restore menu color
+          }
+        }
+      }
+
+			current_arg = 0;
+			current_index = 0;
+			state = normal;
+		}
+	}
+
+	return 1;
+}
+
 
 void terminal_writestring(const char* str) {
 	while(*str != '\0') {
