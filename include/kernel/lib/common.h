@@ -7,18 +7,25 @@
 #define kernel_begin_critical() __asm__("cli");
 #define kernel_end_critical() __asm__("sti");
 
+#define CLI() __asm__ volatile("cli")
+#define STI() __asm__ volatile("sti")
+#define HLT() __asm__ volatile("hlt")
+
 #ifndef NULL
 #define NULL (0)
 #endif
 
 //if the memory layout of this changes, kernel/util/interrupts/interrupt.s must be changed as well
 //to correct offsets
-typedef struct registers {
-	unsigned int gs, fs, es, ds;				//segment registers
-	unsigned int edi, esi, ebp, esp, ebx, edx, ecx, eax;	//pushed by pusha
-	unsigned int int_no, err_code; 				//interrupt number and error code
-	unsigned int eip, cs, eflags, useresp, ss;		//pushed by the processor automatically
-} registers_t;
+typedef struct {
+	uint32_t gs, fs, es, ds;
+	uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
+	uint32_t int_no, err_code;
+	uint32_t eip, cs, eflags, useresp, ss;
+} __attribute__((packed)) registers_t;
+
+typedef void (*handler_t)(registers_t*);
+
 
 
 //returns if interrupts are on

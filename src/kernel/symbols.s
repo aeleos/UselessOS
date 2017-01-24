@@ -6,6 +6,9 @@
 .extern _ctype
 .type _ctype, @function
 
+.extern _int32
+.type _int32, @function
+
 .extern abs
 .type abs, @function
 
@@ -111,8 +114,35 @@
 .extern free
 .type free, @function
 
+.extern gdt_load
+.type gdt_load, @function
+
+.extern gdt_set_entry
+.type gdt_set_entry, @function
+
+.extern gdt_set_kernel_stack
+.type gdt_set_kernel_stack, @function
+
+.extern gdt_write_tss
+.type gdt_write_tss, @function
+
+.extern idt_load
+.type idt_load, @function
+
+.extern idt_set_entry
+.type idt_set_entry, @function
+
 .extern inb
 .type inb, @function
+
+.extern init_gdt
+.type init_gdt, @function
+
+.extern init_idt
+.type init_idt, @function
+
+.extern init_irq
+.type init_irq, @function
 
 .extern initial_esp
 .type initial_esp, @function
@@ -126,11 +156,89 @@
 .extern insm
 .type insm, @function
 
+.extern int32
+.type int32, @function
+
 .extern interrupts_enabled
 .type interrupts_enabled, @function
 
 .extern io_wait
 .type io_wait, @function
+
+.extern irq0
+.type irq0, @function
+
+.extern irq1
+.type irq1, @function
+
+.extern irq10
+.type irq10, @function
+
+.extern irq11
+.type irq11, @function
+
+.extern irq12
+.type irq12, @function
+
+.extern irq13
+.type irq13, @function
+
+.extern irq14
+.type irq14, @function
+
+.extern irq15
+.type irq15, @function
+
+.extern irq2
+.type irq2, @function
+
+.extern irq3
+.type irq3, @function
+
+.extern irq4
+.type irq4, @function
+
+.extern irq5
+.type irq5, @function
+
+.extern irq6
+.type irq6, @function
+
+.extern irq7
+.type irq7, @function
+
+.extern irq8
+.type irq8, @function
+
+.extern irq9
+.type irq9, @function
+
+.extern irq_get_isr
+.type irq_get_isr, @function
+
+.extern irq_getmask
+.type irq_getmask, @function
+
+.extern irq_handler
+.type irq_handler, @function
+
+.extern irq_mask
+.type irq_mask, @function
+
+.extern irq_register_handler
+.type irq_register_handler, @function
+
+.extern irq_remap
+.type irq_remap, @function
+
+.extern irq_send_eoi
+.type irq_send_eoi, @function
+
+.extern irq_setmask
+.type irq_setmask, @function
+
+.extern irq_unmask
+.type irq_unmask, @function
 
 .extern isalnum
 .type isalnum, @function
@@ -158,6 +266,111 @@
 
 .extern isprint
 .type isprint, @function
+
+.extern isr0
+.type isr0, @function
+
+.extern isr1
+.type isr1, @function
+
+.extern isr10
+.type isr10, @function
+
+.extern isr11
+.type isr11, @function
+
+.extern isr12
+.type isr12, @function
+
+.extern isr13
+.type isr13, @function
+
+.extern isr14
+.type isr14, @function
+
+.extern isr15
+.type isr15, @function
+
+.extern isr16
+.type isr16, @function
+
+.extern isr17
+.type isr17, @function
+
+.extern isr18
+.type isr18, @function
+
+.extern isr19
+.type isr19, @function
+
+.extern isr2
+.type isr2, @function
+
+.extern isr20
+.type isr20, @function
+
+.extern isr21
+.type isr21, @function
+
+.extern isr22
+.type isr22, @function
+
+.extern isr23
+.type isr23, @function
+
+.extern isr24
+.type isr24, @function
+
+.extern isr25
+.type isr25, @function
+
+.extern isr26
+.type isr26, @function
+
+.extern isr27
+.type isr27, @function
+
+.extern isr28
+.type isr28, @function
+
+.extern isr29
+.type isr29, @function
+
+.extern isr3
+.type isr3, @function
+
+.extern isr30
+.type isr30, @function
+
+.extern isr31
+.type isr31, @function
+
+.extern isr4
+.type isr4, @function
+
+.extern isr48
+.type isr48, @function
+
+.extern isr5
+.type isr5, @function
+
+.extern isr6
+.type isr6, @function
+
+.extern isr7
+.type isr7, @function
+
+.extern isr8
+.type isr8, @function
+
+.extern isr9
+.type isr9, @function
+
+.extern isr_handler
+.type isr_handler, @function
+
+.extern isr_register_handler
+.type isr_register_handler, @function
 
 .extern isspace
 .type isspace, @function
@@ -239,6 +452,9 @@
 
 .extern pi
 .type pi, @function
+
+.extern pit_install
+.type pit_install, @function
 
 .extern placement_address
 .type placement_address, @function
@@ -387,6 +603,9 @@
 .extern terminal_writestring
 .type terminal_writestring, @function
 
+.extern tick_count
+.type tick_count, @function
+
 .extern toascii
 .type toascii, @function
 
@@ -422,6 +641,9 @@ kernel_symbols_start:
 
 .long _ctype
 .asciz "_ctype"
+
+.long _int32
+.asciz "_int32"
 
 .long abs
 .asciz "abs"
@@ -528,8 +750,35 @@ kernel_symbols_start:
 .long free
 .asciz "free"
 
+.long gdt_load
+.asciz "gdt_load"
+
+.long gdt_set_entry
+.asciz "gdt_set_entry"
+
+.long gdt_set_kernel_stack
+.asciz "gdt_set_kernel_stack"
+
+.long gdt_write_tss
+.asciz "gdt_write_tss"
+
+.long idt_load
+.asciz "idt_load"
+
+.long idt_set_entry
+.asciz "idt_set_entry"
+
 .long inb
 .asciz "inb"
+
+.long init_gdt
+.asciz "init_gdt"
+
+.long init_idt
+.asciz "init_idt"
+
+.long init_irq
+.asciz "init_irq"
 
 .long initial_esp
 .asciz "initial_esp"
@@ -543,11 +792,89 @@ kernel_symbols_start:
 .long insm
 .asciz "insm"
 
+.long int32
+.asciz "int32"
+
 .long interrupts_enabled
 .asciz "interrupts_enabled"
 
 .long io_wait
 .asciz "io_wait"
+
+.long irq0
+.asciz "irq0"
+
+.long irq1
+.asciz "irq1"
+
+.long irq10
+.asciz "irq10"
+
+.long irq11
+.asciz "irq11"
+
+.long irq12
+.asciz "irq12"
+
+.long irq13
+.asciz "irq13"
+
+.long irq14
+.asciz "irq14"
+
+.long irq15
+.asciz "irq15"
+
+.long irq2
+.asciz "irq2"
+
+.long irq3
+.asciz "irq3"
+
+.long irq4
+.asciz "irq4"
+
+.long irq5
+.asciz "irq5"
+
+.long irq6
+.asciz "irq6"
+
+.long irq7
+.asciz "irq7"
+
+.long irq8
+.asciz "irq8"
+
+.long irq9
+.asciz "irq9"
+
+.long irq_get_isr
+.asciz "irq_get_isr"
+
+.long irq_getmask
+.asciz "irq_getmask"
+
+.long irq_handler
+.asciz "irq_handler"
+
+.long irq_mask
+.asciz "irq_mask"
+
+.long irq_register_handler
+.asciz "irq_register_handler"
+
+.long irq_remap
+.asciz "irq_remap"
+
+.long irq_send_eoi
+.asciz "irq_send_eoi"
+
+.long irq_setmask
+.asciz "irq_setmask"
+
+.long irq_unmask
+.asciz "irq_unmask"
 
 .long isalnum
 .asciz "isalnum"
@@ -575,6 +902,111 @@ kernel_symbols_start:
 
 .long isprint
 .asciz "isprint"
+
+.long isr0
+.asciz "isr0"
+
+.long isr1
+.asciz "isr1"
+
+.long isr10
+.asciz "isr10"
+
+.long isr11
+.asciz "isr11"
+
+.long isr12
+.asciz "isr12"
+
+.long isr13
+.asciz "isr13"
+
+.long isr14
+.asciz "isr14"
+
+.long isr15
+.asciz "isr15"
+
+.long isr16
+.asciz "isr16"
+
+.long isr17
+.asciz "isr17"
+
+.long isr18
+.asciz "isr18"
+
+.long isr19
+.asciz "isr19"
+
+.long isr2
+.asciz "isr2"
+
+.long isr20
+.asciz "isr20"
+
+.long isr21
+.asciz "isr21"
+
+.long isr22
+.asciz "isr22"
+
+.long isr23
+.asciz "isr23"
+
+.long isr24
+.asciz "isr24"
+
+.long isr25
+.asciz "isr25"
+
+.long isr26
+.asciz "isr26"
+
+.long isr27
+.asciz "isr27"
+
+.long isr28
+.asciz "isr28"
+
+.long isr29
+.asciz "isr29"
+
+.long isr3
+.asciz "isr3"
+
+.long isr30
+.asciz "isr30"
+
+.long isr31
+.asciz "isr31"
+
+.long isr4
+.asciz "isr4"
+
+.long isr48
+.asciz "isr48"
+
+.long isr5
+.asciz "isr5"
+
+.long isr6
+.asciz "isr6"
+
+.long isr7
+.asciz "isr7"
+
+.long isr8
+.asciz "isr8"
+
+.long isr9
+.asciz "isr9"
+
+.long isr_handler
+.asciz "isr_handler"
+
+.long isr_register_handler
+.asciz "isr_register_handler"
 
 .long isspace
 .asciz "isspace"
@@ -656,6 +1088,9 @@ kernel_symbols_start:
 
 .long pi
 .asciz "pi"
+
+.long pit_install
+.asciz "pit_install"
 
 .long placement_address
 .asciz "placement_address"
@@ -803,6 +1238,9 @@ kernel_symbols_start:
 
 .long terminal_writestring
 .asciz "terminal_writestring"
+
+.long tick_count
+.asciz "tick_count"
 
 .long toascii
 .asciz "toascii"
