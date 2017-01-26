@@ -8,7 +8,7 @@ void halt_execution() {
 	kernel_begin_critical();
 
 	//enter infinite loop
-	printf_err("Halting execution\n");
+	printf_err("Halting execution");
 	do {} while (1);
 }
 
@@ -25,10 +25,10 @@ void dump_stack(uint32_t* esp) {
 	for (int i = 0; i < 8; i++) {
 		esp--;
 		if (i % 2) {
-			printf("\x1B[12f;");
+			printf("\x1B[2;");
 		}
 		else {
-			printf("\x1B[13f;");
+			printf("\x1B[3;");
 		}
 		uint8_t* esp_byte = (uint8_t*)esp;
 
@@ -61,15 +61,15 @@ void common_halt(registers_t regs, bool recoverable) {
 }
 
 void print_selector_error_code(uint32_t err_code) {
-	printf_err("Selector error code %x interpreted below\n", err_code);
+	printf_err("Selector error code %x interpreted below", err_code);
 
-	if (err_code & 0xF) printf_err("Exception originated outside processor\n");
-	else printf_err("Exception occurred inside processor\n");
+	if (err_code & 0xF) printf_err("Exception originated outside processor");
+	else printf_err("Exception occurred inside processor");
 
-	if (err_code & 0x00) printf_err("Selector index references descriptor in GDT\n");
-	else if (err_code & 0x01) printf_err("Selector index references descriptor in IDT\n");
-	else if (err_code & 0x10) printf_err("Selector index references descriptor in LDT\n");
-	else if (err_code & 0x11) printf_err("Selector index references descruptor in IDT\n");
+	if (err_code & 0x00) printf_err("Selector index references descriptor in GDT");
+	else if (err_code & 0x01) printf_err("Selector index references descriptor in IDT");
+	else if (err_code & 0x10) printf_err("Selector index references descriptor in LDT");
+	else if (err_code & 0x11) printf_err("Selector index references descruptor in IDT");
 
 	printf_info("Selector index follows");
 	//TODO print index
@@ -77,73 +77,73 @@ void print_selector_error_code(uint32_t err_code) {
 }
 
 void handle_divide_by_zero(registers_t regs) {
-	printf_err("Attempted division by zero\n");
+	printf_err("Attempted division by zero");
 	common_halt(regs, false);
 }
 
 void handle_bound_range_exceeded(registers_t regs) {
-	printf_err("Bound range exception\n");
+	printf_err("Bound range exception");
 	common_halt(regs, false);
 }
 
 void handle_invalid_opcode(registers_t regs) {
-	printf_err("Invalid opcode encountered\n");
+	printf_err("Invalid opcode encountered");
 	common_halt(regs, false);
 }
 
 void handle_device_not_available(registers_t regs) {
-	printf_err("Device not available\n");
+	printf_err("Device not available");
 	common_halt(regs, false);
 }
 
 void handle_double_fault(registers_t regs) {
-	printf_err("=======================\n");
-	printf_err("Caught double fault!\n");
-	printf_err("=======================\n");
+	printf_err("=======================");
+	printf_err("Caught double fault!");
+	printf_err("=======================");
 	common_halt(regs, false);
 }
 
 void handle_invalid_tss(registers_t regs) {
-	printf_err("Invalid TSS section!\n");
+	printf_err("Invalid TSS section!");
 	print_selector_error_code(regs.err_code);
 	common_halt(regs, false);
 }
 
 void handle_segment_not_present(registers_t regs) {
-	printf_err("Segment not present\n");
+	printf_err("Segment not present");
 	print_selector_error_code(regs.err_code);
 	common_halt(regs, false);
 }
 
 void handle_stack_segment_fault(registers_t regs) {
-	printf_err("Stack segment fault\n");
+	printf_err("Stack segment fault");
 	print_selector_error_code(regs.err_code);
 	common_halt(regs, false);
 }
 
 void handle_general_protection_fault(registers_t regs) {
-	printf_err("General protection fault\n");
+	printf_err("General protection fault");
 	print_selector_error_code(regs.err_code);
 	common_halt(regs, false);
 }
 
 void handle_floating_point_exception(registers_t regs) {
-	printf_err("Floating point exception\n");
+	printf_err("Floating point exception");
 	common_halt(regs, false);
 }
 
 void handle_alignment_check(registers_t regs) {
-	printf_err("Alignment check\n");
+	printf_err("Alignment check");
 	common_halt(regs, false);
 }
 
 void handle_machine_check(registers_t regs) {
-	printf_err("Machine check\n");
+	printf_err("Machine check");
 	common_halt(regs, false);
 }
 
 void handle_virtualization_exception(registers_t regs) {
-	printf_err("Virtualization exception\n");
+	printf_err("Virtualization exception");
 	common_halt(regs, false);
 }
 
@@ -176,7 +176,7 @@ void isr_handler(registers_t regs) {
 		handler(regs);
 	}
 	else {
-		printf_err("Unhandled ISR: %d\n", int_no);
+		printf_err("Unhandled ISR: %d", int_no);
 		//common_halt(*regs, true);
 	}
 }
@@ -212,5 +212,5 @@ void irq_handler(registers_t regs) {
 		isr_t handler = interrupt_handlers[regs.int_no];
 		handler(regs);
 	}
-	else printf_dbg("unhandled IRQ %d\n", regs.int_no);
+	else printf_dbg("unhandled IRQ %d", regs.int_no);
 }

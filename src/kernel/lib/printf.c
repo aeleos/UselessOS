@@ -220,7 +220,7 @@ void sprintf(char* str, char* format, ...) {
 }
 
 void printf_dbg(char* format, ...) {
-	printf("\e[10f;[\e[11f;DEBUG\e[10f;] \e[15f;");
+	printf("\e[10;[\e[11;DEBUG\e[10;] \e[15;");
 
 	va_list arg;
 	va_start(arg, format);
@@ -230,7 +230,7 @@ void printf_dbg(char* format, ...) {
 }
 
 void printf_info(char* format, ...) {
-	printf("\e[10f;[INFO\e[10f;] \e[15f;");
+	printf("\e[10;[INFO\e[10;] \e[15;");
 
 	va_list arg;
 	va_start(arg, format);
@@ -247,7 +247,7 @@ void printf_err(const char* format, ...) {
 }
 
 void vprintf_err(const char* format, va_list ap) {
-	printf("\e[10f;[\e[12f;ERROR\e[10f;] \e[15f;");
+	printf("\e[10;[\e[12;ERROR\e[10;] \e[15;");
 
 	vprintf((char*)format, ap);
 

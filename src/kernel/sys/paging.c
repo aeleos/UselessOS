@@ -101,7 +101,7 @@ static int32_t first_frame() {
 			}
 		}
 	}
-	printf_info("first_frame(): no free frames!\n");
+	printf_info("first_frame(): no free frames!");
 	return -1;
 }
 #pragma GCC diagnostic pop
@@ -136,7 +136,7 @@ void vmem_map(uint32_t virt, uint32_t physical) {
 		page->user = 1;
 		page->frame = (virt+ (i * 0x1000)) / 0x1000;
 	}
-	printf_info("Mapping %x (%x) -> %x\n", virt, id, physical);
+	printf_info("Mapping %x (%x) -> %x", virt, id, physical);
 }
 
 //function to allocate a frame
@@ -150,7 +150,7 @@ void alloc_frame(page_t* page, int is_kernel, int is_writeable) {
 	*/
 	int32_t idx = first_frame(); //index of first free frame
 	if (idx == -1) {
-		PANIC("No free frames!\n");
+		PANIC("No free frames!");
 	}
 	//printf_info("alloc_frame(): setting bit frame %x", idx);
 	set_bit_frame(idx*0x1000); //frame is now ours
@@ -207,7 +207,7 @@ void set_paging_bit(bool enabled) {
 }
 
 void paging_install() {
-	printf_info("Initializing paging...\n");
+	printf_info("Initializing paging...");
 
 	//size of physical memory
 	//assume 32MB
@@ -245,7 +245,6 @@ void paging_install() {
 	//note, inside this loop body we actually change placement_address
 	//by calling kmalloc(). A while loop causes this to be computed
 	//on-the-fly instead of once at the start
-  printf_info("Mapping and allocating pages...");
 	unsigned idx = 0;
 	while (idx < placement_address + 0x1000) {
 		//kernel code is readable but not writeable from userspace
@@ -257,7 +256,7 @@ void paging_install() {
 	for (i = KHEAP_START; i < KHEAP_START + KHEAP_INITIAL_SIZE; i += 0x1000) {
 		alloc_frame(get_page(i, 1, kernel_directory), 0, 0);
 	}
-  printf("\x1B[s\x1B[72x\x1B[15f;[  \x1B[2f;OK  \x1B[15f;]\x1B[u\n");
+	printf_info("finished identity mapping kernel pages");
 
 	//before we enable paging, register page fault handler
 	register_interrupt_handler(14, page_fault);
@@ -267,11 +266,10 @@ void paging_install() {
 	//turn on paging
 	set_paging_bit(true);
 
-  printf_info("Allocating heap...");
+
 	//initialize kernel heap
 	kheap = create_heap(KHEAP_START, KHEAP_START + KHEAP_INITIAL_SIZE, KHEAP_MAX_ADDRESS, 0, 0);
 	expand(0x1000000, kheap);
-  printf("\x1B[s\x1B[72x\x1B[15f;[  \x1B[2f;OK  \x1B[15f;]\x1B[u\n");
 
 	current_directory = clone_directory(kernel_directory);
 	switch_page_directory(current_directory);
@@ -293,7 +291,7 @@ page_t* get_page(uint32_t address, int make, page_directory_t* dir) {
 		return &dir->tables[table_idx]->pages[address%1024];
 	}
 	else if (make) {
-		// printf_info("creating page at %x\n", address);
+		printf_info("creating page at %x", address);
 		uint32_t tmp;
 		dir->tables[table_idx] = (page_table_t*)kmalloc_ap(sizeof(page_table_t), &tmp);
 		memset(dir->tables[table_idx], 0, 0x1000);
@@ -319,41 +317,41 @@ static void page_fault(registers_t regs) {
 	int reserved = regs.err_code & 0x8; //overwritten CPU-reserved bits of page entry?
 	int id = regs.err_code & 0x10; //caused by instruction fetch?
 
-	printf_err("Encountered page fault at %x\n", faulting_address);
+	printf_err("Encountered page fault at %x", faulting_address);
 
-	if (present) printf_err("Page present\n");
-	else printf_err("Page not present\n");
+	if (present) printf_err("Page present");
+	else printf_err("Page not present");
 
-	if (rw) printf_err("Write operation\n");
-	else printf_err("Read operation\n");
+	if (rw) printf_err("Write operation");
+	else printf_err("Read operation");
 
-	if (us) printf_err("User mode\n");
-	else printf_err("Supervisor mode\n");
+	if (us) printf_err("User mode");
+	else printf_err("Supervisor mode");
 
-	if (reserved) printf_err("Overwrote CPU-resereved bits of page entry\n");
+	if (reserved) printf_err("Overwrote CPU-resereved bits of page entry");
 
-	if (id) printf_err("Faulted during instruction fetch\n");
+	if (id) printf_err("Faulted during instruction fetch");
 
 	if (regs.eip != faulting_address) {
-		printf_err("Page fault caused by executing unpaged memory\n");
+		printf_err("Page fault caused by executing unpaged memory");
 	}
 	else {
-		printf_err("Page fault caused by reading unpaged memory\n");
+		printf_err("Page fault caused by reading unpaged memory");
 	}
 
 	//if this page was present, attempt to recover by allocating the page
 	if (present) {
-		printf_info("attempting page fault recovery...\n");
+		printf_info("attempting page fault recovery...");
 		//upper 10 bits of faulting addr has pde
 		unsigned table_mask = (1 << 10) - 1;
 		page_table_t* table = (page_table_t*)(faulting_address & table_mask);
-		printf_info("Addr of table: %x\n", &table);
+		printf_info("Addr of table: %x", &table);
 
 		//middle 10 bits has pte
 		unsigned page_mask = ((1 << 10) - 1) << 10;
 		page_t* page = (page_t*)(faulting_address & page_mask);
-		printf_info("page addr %x\n", &page);
-		printf_info("page frame: %x\n", page->frame);
+		printf_info("page addr %x", &page);
+		printf_info("page frame: %x", page->frame);
 		alloc_frame(get_page((uint32_t)&page, present, kernel_directory), 0, rw);
 
 		__asm__ volatile("xchgw %bx, %bx");

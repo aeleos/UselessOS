@@ -135,12 +135,6 @@
 .extern flush_cache
 .type flush_cache, @function
 
-.extern force_hardware_irq
-.type force_hardware_irq, @function
-
-.extern force_page_fault
-.type force_page_fault, @function
-
 .extern frames
 .type frames, @function
 
@@ -684,9 +678,6 @@
 .extern terminal_initialize
 .type terminal_initialize, @function
 
-.extern terminal_interpret_ansi
-.type terminal_interpret_ansi, @function
-
 .extern terminal_movecursor
 .type terminal_movecursor, @function
 
@@ -710,21 +701,6 @@
 
 .extern terminal_writestring
 .type terminal_writestring, @function
-
-.extern test_colors
-.type test_colors, @function
-
-.extern test_heap
-.type test_heap, @function
-
-.extern test_interrupts
-.type test_interrupts, @function
-
-.extern test_malloc
-.type test_malloc, @function
-
-.extern test_printf
-.type test_printf, @function
 
 .extern toascii
 .type toascii, @function
@@ -908,12 +884,6 @@ kernel_symbols_start:
 
 .long flush_cache
 .asciz "flush_cache"
-
-.long force_hardware_irq
-.asciz "force_hardware_irq"
-
-.long force_page_fault
-.asciz "force_page_fault"
 
 .long frames
 .asciz "frames"
@@ -1458,9 +1428,6 @@ kernel_symbols_start:
 .long terminal_initialize
 .asciz "terminal_initialize"
 
-.long terminal_interpret_ansi
-.asciz "terminal_interpret_ansi"
-
 .long terminal_movecursor
 .asciz "terminal_movecursor"
 
@@ -1484,21 +1451,6 @@ kernel_symbols_start:
 
 .long terminal_writestring
 .asciz "terminal_writestring"
-
-.long test_colors
-.asciz "test_colors"
-
-.long test_heap
-.asciz "test_heap"
-
-.long test_interrupts
-.asciz "test_interrupts"
-
-.long test_malloc
-.asciz "test_malloc"
-
-.long test_printf
-.asciz "test_printf"
 
 .long toascii
 .asciz "toascii"

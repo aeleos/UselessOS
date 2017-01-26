@@ -6,13 +6,10 @@
 
 
 #include <sys/isr.h>
-#include <sys/descriptor_tables.h>
-#include <sys/paging.h>
 
 #include <lib/string.h>
 #include <lib/printf.h>
 
-#include <util/tests.h>
 
 
 
@@ -21,7 +18,7 @@ uintptr_t initial_esp = 0;
 
 
 void print_os_name(void) {
-	printf("\x1B[10f;[\x1B[11f;Useless OS v\x1B[12f;0.0.1\x1B[10f;]\x1B[15f\n");
+	printf("\x1B[10;[\x1B[11;Useless OS v\x1B[12;0.0.1\x1B[10;]\n");
 }
 
 
@@ -34,24 +31,9 @@ int kernel_main(struct multiboot *mboot_ptr, uint32_t mboot_magic, uintptr_t esp
   // terminal_writestring("P");
 	//introductory message
 	print_os_name();
-  // printf("&#93;\n");
-  // printf("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n");
-  test_colors();
-	// printf_info("Printing stack\n");
+	printf_info("Printing stack\n");
   dump_stack(esp);
-  //
-  // printf_info("Available memory: ");
-  // printf("%d -> %dMB\n", mboot_ptr->mem_upper, (mboot_ptr->mem_upper/1024));
-  //
-  gdt_install();
-	idt_install();
-  //
-  paging_install();
-	// // // sys_install();
-  // //
-	// // // test_interrupts();
-  test_heap();
-  // printf("\x1B[h10");
+
   // terminal_writestring("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
 
   return 0;

@@ -23,7 +23,7 @@ tss_entry_t tss_entry;
 extern isr_t interrupt_handlers[];
 
 void gdt_install() {
-	printf_info("Installing GDT...\n");
+	printf_info("Installing GDT...");
 
 	gdt_ptr.limit = (sizeof(gdt_entry_t) * 6) - 1;
 	gdt_ptr.base = (uint32_t)&gdt_entries;
@@ -40,7 +40,7 @@ void gdt_install() {
 }
 
 void idt_install() {
-	printf_info("Installing IDT...\n");
+	printf_info("Installing IDT...");
 
 	idt_ptr.limit = sizeof(idt_entry_t) * 256 -1;
 	idt_ptr.base = (uint32_t)&idt_entries;
