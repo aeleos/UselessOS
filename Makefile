@@ -17,7 +17,7 @@ AS = i686-pc-useless-as
 CFLAGS  = -O2 -std=c99
 CFLAGS += -finline-functions -ffreestanding
 CFLAGS += -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Wno-format
-CFLAGS += -fno-omit-frame-pointer  -Wchar-subscripts -Wsequence-point
+CFLAGS += -pedantic -fno-omit-frame-pointer
 CFLAGS += -D_KERNEL_
 
 ASFLAGS = --32
@@ -33,7 +33,6 @@ NASM_FLAGS = -f elf -F dwarf
 KERNEL_OBJS = $(patsubst %.c,%.o,$(wildcard src/kernel/*.c))
 KERNEL_OBJS += $(patsubst %.c,%.o,$(wildcard src/kernel/*/*.c))
 KERNEL_OBJS += $(patsubst %.c,%.o,$(wildcard src/kernel/*/*/*.c))
-KERNEL_OBJS += $(patsubst %.c,%.o,$(wildcard src/kernel/*/*/*/*.c))
 
 # Loadable modules
 MODULES = $(patsubst modules/%.c,hdd/mod/%.ko,$(wildcard modules/*.c))
