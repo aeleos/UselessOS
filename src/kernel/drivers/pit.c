@@ -1,7 +1,7 @@
 #include <drivers/pit.h>
 #include <cpu/isr.h>
 #include <cpu/irq.h>
-// #include <kernel.h>
+#include <sys/io.h>
 #include <lib/math.h>
 #include <lib/common.h>
 #include <lib/printf.h>
@@ -28,7 +28,7 @@ void pit_install(uint32_t frequency) {
 
 
 	//firstly, register our timer callback
-	irq_register_handler(IRQ0, &tick_callback);
+	irq_register_handler(IRQ0, (handler_t)&tick_callback);
 
 	//value we need to send to PIC is value to divide it's input clock
 	//(1193180 Hz) by, to get desired frequency

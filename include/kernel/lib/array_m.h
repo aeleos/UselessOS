@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define ARR_NOT_FOUND -1
+
 typedef void* type_t;
 
 typedef struct {

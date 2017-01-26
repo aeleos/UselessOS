@@ -2,7 +2,7 @@
 #define PAGING_H
 
 #include <lib/common.h>
-// #include <sys/isr.h>
+#include <cpu/isr.h>
 #include <lib/stdbool.h>
 
 typedef struct page {
@@ -33,32 +33,33 @@ typedef struct page_directory {
 	uint32_t physicalAddr;
 } page_directory_t;
 
-// //sets up environment, page directories, etc
-// //and, enables paging
-// void paging_install();
-//
-// //causes passed page directory to be loaded into
-// //CR3 register
-// void switch_page_directory(page_directory_t* new_dir);
-//
-// //retrieves pointer to page required
-// //if make == 1, if the page-table in which this page should
-// //reside isn't created, create it
-// page_t* get_page(uint32_t address, int make, page_directory_t* dir);
-//
-// //retrieves current cr3 (current paging dir)
-// page_directory_t* get_cr3();
-//
-// //maps physical range to virtual memory
-// void vmem_map(uint32_t virt, uint32_t physical);
-//
-// bool alloc_frame(page_t* page, int is_kernel, int is_writeable);
-// void free_frame(page_t* page);
-//
-// //create a new page directory with all the info of src
-// //kernel pages are linked instead of copied
-// page_directory_t* clone_directory(page_directory_t* src);
-// //free all memory associated with a page directory dir
-// void free_directory(page_directory_t* dir);
+//sets up environment, page directories, etc
+//and, enables paging
+void paging_install(uint32_t mem);
+
+//causes passed page directory to be loaded into
+//CR3 register
+void switch_page_directory(page_directory_t* new_dir);
+
+//retrieves pointer to page required
+//if make == 1, if the page-table in which this page should
+//reside isn't created, create it
+page_t* get_page(uint32_t address, int make, page_directory_t* dir);
+
+//retrieves current cr3 (current paging dir)
+page_directory_t* get_cr3();
+
+//maps physical range to virtual memory
+void vmem_map(uint32_t virt, uint32_t physical);
+
+bool alloc_frame(page_t* page, int is_kernel, int is_writeable);
+
+void free_frame(page_t* page);
+
+//create a new page directory with all the info of src
+//kernel pages are linked instead of copied
+page_directory_t* clone_directory(page_directory_t* src);
+//free all memory associated with a page directory dir
+void free_directory(page_directory_t* dir);
 
 #endif

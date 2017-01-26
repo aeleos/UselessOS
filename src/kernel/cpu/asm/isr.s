@@ -7,7 +7,7 @@
 		cli
 		push $0
 		push $\num
-		jmp isr_common_handler
+		jmp isrs_common_handler
 .endm
 
 .macro ISR_ERR num
@@ -15,7 +15,7 @@
 	isr\num:
 		cli
 		push $\num
-		jmp isr_common_handler
+		jmp isrs_common_handler
 .endm
 
 ISR_NOERR 0
@@ -52,10 +52,10 @@ ISR_NOERR 30
 ISR_NOERR 31
 ISR_NOERR 48 # Syscall
 
-.extern isr_handler
-.type isr_handler, @function
+.extern isrs_handler
+.type isrs_handler, @function
 
-isr_common_handler:
+isrs_common_handler:
 	pusha
 
 	push %ds
@@ -70,7 +70,7 @@ isr_common_handler:
 	mov %ax, %gs
 
 	push %esp
-	call isr_handler
+	call isrs_handler
 	add $4, %esp
 
 	pop %ds

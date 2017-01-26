@@ -2,12 +2,13 @@
 #include <lib/panic.h>
 #include <lib/printf.h>
 #include <lib/common.h>
-#include <cpu/idt.h>
+#include <cpu/descriptor_tables.h>
+#include <sys/io.h>
 
 
 static handler_t irq_handlers[16];
 
-void init_irq() {
+void install_irq() {
 	irq_remap();
 
 	idt_set_entry(32, (uint32_t) irq0, 0x08, 0x8E);
@@ -27,7 +28,8 @@ void init_irq() {
 	idt_set_entry(46, (uint32_t) irq14, 0x08, 0x8E);
 	idt_set_entry(47, (uint32_t) irq15, 0x08, 0x8E);
 	STI();
-	printf("[IRQ] Initialized\n");
+	printf_info("IRQ Initialized");
+  print_ok();
 }
 
 void irq_handler(registers_t* regs) {

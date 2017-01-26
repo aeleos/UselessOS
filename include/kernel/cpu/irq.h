@@ -4,7 +4,7 @@
 #include <lib/stdint.h>
 #include <lib/common.h>
 
-void init_irq();
+void install_irq();
 void irq_handler(registers_t* regs);
 void irq_send_eoi(uint8_t irq);
 void irq_register_handler(uint8_t irq, handler_t handler);

@@ -1,11 +1,13 @@
-#include <lib/common.h>
 #include <lib/kheap.h>
+#include <lib/common.h>
 #include <lib/panic.h>
 #include <lib/math.h>
 #include <lib/printf.h>
+#include <sys/mutex.h>
+#include <sys/task.h>
+#include <lib/memory.h>
 
 #include <sys/paging.h>
-
 
 #define PAGE_SIZE 0x1000 /* 4kb page */
 
@@ -13,22 +15,26 @@
 extern uint32_t end;
 uint32_t placement_address = (uint32_t)&end;
 
-// extern page_directory_t* kernel_directory;
-// extern page_directory_t* current_directory;
+extern page_directory_t* kernel_directory;
+extern page_directory_t* current_directory;
 
 heap_t* kheap = 0;
+lock_t* mutex = 0;
 static uint32_t used_bytes;
 
-uint32_t kmalloc_int(uint32_t sz, int align, uint32_t* phys) {
+//root kmalloc function
+//increments placement_address if there is no heap
+//otherwise, pass through to heap with given options
+void* kmalloc_int(uint32_t sz, int align, uint32_t* phys) {
 	//if the heap already exists, pass through
-	// if (kheap) {
-	// 	void* addr = alloc(sz, (uint8_t)align, kheap);
-	// 	if (phys) {
-	// 		page_t* page = get_page((uint32_t)addr, 0, kernel_directory);
-	// 		*phys = page->frame * PAGE_SIZE + ((uint32_t)addr & 0xFFF);
-	// 	}
-	// 	return (uint32_t)addr;
-	// }
+	if (kheap) {
+		void* addr = alloc(sz, (uint8_t)align, kheap);
+		if (phys) {
+			page_t* page = get_page((uint32_t)addr, 0, kernel_directory);
+			*phys = page->frame * PAGE_SIZE + ((uint32_t)addr & 0xFFF);
+		}
+		return addr;
+	}
 
 	//if addr is not already page aligned
 	if (align && (placement_address & 0xFFFFF000)) {
@@ -42,22 +48,22 @@ uint32_t kmalloc_int(uint32_t sz, int align, uint32_t* phys) {
 	uint32_t tmp = placement_address;
 	placement_address += sz;
 
-	return tmp;
+	return (void*)tmp;
 }
 
-uint32_t kmalloc_a(uint32_t sz) {
+void* kmalloc_a(uint32_t sz) {
 	return kmalloc_int(sz, 1, 0);
 }
 
-uint32_t kmalloc_p(uint32_t sz, uint32_t* phys) {
+void* kmalloc_p(uint32_t sz, uint32_t* phys) {
 	return kmalloc_int(sz, 0, phys);
 }
 
-uint32_t kmalloc_ap(uint32_t sz, uint32_t* phys) {
+void* kmalloc_ap(uint32_t sz, uint32_t* phys) {
 	return kmalloc_int(sz, 1, phys);
 }
 
-uint32_t kmalloc(uint32_t sz) {
+void* kmalloc_real(uint32_t sz) {
 	return kmalloc_int(sz, 0, 0);
 }
 
@@ -65,45 +71,117 @@ void kfree(void* p) {
 	free(p, kheap);
 }
 
-static int32_t find_smallest_hole(uint32_t size, uint8_t align, heap_t* heap) {
-	//find smallest hole that will fit
-	uint32_t iterator = 0;
-	while (iterator < heap->index->size) {
-		header_t* header = (header_t*)array_o_lookup(heap->index, iterator);
+void heap_fail(void* dump) {
+	heap_print(10);
+	dump_stack(dump);
+	memdebug();
 
-		//check if magic is valid
-		ASSERT(header->magic == HEAP_MAGIC, "invalid header magic");
-
-		//if user has requested memory be page aligned
-		//
-		if (align > 0) {
-			//page align starting point of header
-			uint32_t location = (uint32_t)header;
-			int32_t offset = 0;
-			if (((location + sizeof(header_t)) & 0xFFFFF000) != 0) {
-				offset = PAGE_SIZE - ((location + sizeof(header_t)) % PAGE_SIZE);
-			}
-
-			int32_t hole_size = (int32_t)header->size - offset;
-			//do we still fit?
-			if (hole_size >= (int32_t)size) break;
-		}
-		else if (header->size >= size) break;
-
-		iterator++;
-	}
-
-	//why did the loop exit?
-	if (iterator == heap->index->size) {
-		//reached end of index and didn't find any holes small enough
-		return -1;
-	}
-
-	return iterator;
+	printk_err("PID %d encountered corrupted heap. Killing task...", getpid());
+	_kill();
 }
 
-static int8_t header_t_less_than(void* a, void* b) {
-	return (((header_t*)a)->size < ((header_t*)b)->size);
+//create a heap header at addr, where the block in questoin is size bytes
+static alloc_block_t* create_block(uint32_t addr, uint32_t size) {
+	alloc_block_t* block = (alloc_block_t*)addr;
+	memset(block, 0, sizeof(alloc_block_t));
+	block->magic = HEAP_MAGIC;
+	block->free = true;
+	block->size = size;
+	return block;
+}
+
+//insert new block header into linked list of blocks
+//inserts in space past prev
+static void insert_block(alloc_block_t* prev, alloc_block_t* new) {
+	if (!prev || !new) {
+		printk_err("insert_block(): prev or new was NULL");
+		return;
+	}
+
+	lock(mutex);
+
+	if (prev->next) {
+		new->next = prev->next;
+	}
+	if (new->next) {
+		new->next->prev = new;
+	}
+
+	prev->next = new;
+	new->prev = prev;
+
+	unlock(mutex);
+}
+
+//get the first block header in linked list
+static alloc_block_t* first_block(heap_t* heap) {
+	return (alloc_block_t*)heap->start_address;
+}
+
+//find the smallest block at least size bytes big, and,
+//if page aligning is requested, is large enough to be page aligned
+//(if so, page-aligns block and returns aligned block)
+static alloc_block_t* find_smallest_hole(uint32_t size, bool align, heap_t* heap) {
+	//printk_info("find_smallest_hole(): %x bytes align? %d", size, align);
+	//start off with first block
+	alloc_block_t* candidate = first_block(heap);
+
+	//lock(mutex);
+
+	//search every hole
+	do {
+		if (candidate->free) {
+			if (candidate->size >= size) {
+				//found valid header!
+				//printk_info("find_smallest_hole() found likely candidate %x", (uint32_t)candidate);
+
+				//attempt to align if user requested
+				//make sure addr isn't already page aligned before aligning
+				uint32_t addr = (uint32_t)candidate + sizeof(alloc_block_t);
+				if (align && (addr & 0xFFF)) {
+					//find distance to page align
+					uint32_t aligned_addr = ((addr & 0xFFFFF000) + PAGE_SIZE) - sizeof(alloc_block_t);
+					uint32_t distance = aligned_addr - addr;
+
+					//does the align adjustment fit in the block?
+					if (distance < size) {
+						// printk_info("find_smallest_hole(): page aligning block \n@ %x to %x (really starts at %x)", addr, aligned_addr, aligned_addr + sizeof(alloc_block_t));
+						// print_ok();
+
+						//create new block at page aligned addr
+						uint32_t new_size = candidate->size - distance - sizeof(alloc_block_t);
+						alloc_block_t* aligned = create_block((uint32_t)aligned_addr, new_size);
+
+						//printk_dbg("find_smallest_hole(): candidate is %x next %x", candidate, candidate->next);
+						insert_block(candidate, aligned);
+
+						//make sure we shrink original candidate since some of it is now in new aligned block
+						candidate->size = candidate->size - aligned->size - sizeof(alloc_block_t);
+						//all done!
+
+						unlock(mutex);
+						return aligned;
+					}
+					else {
+						//printk_info("find_smallest_hole(): addr %x aligned %x distance %x", addr, aligned_addr, distance);
+						//block too small to align
+						//printk_info("find_smallest_hole(): block @ %x [%x] too small to align to %x (needs %x usable bytes), leftover size is %x", addr, candidate->size, aligned_addr, size, candidate->size - distance);
+						continue;
+					}
+				}
+				else if (align) {
+					//printk_info("find_smallest_hole(): addr %x requested page align but already aligned", addr);
+				}
+				return candidate;
+			}
+		}
+	} while ((candidate = candidate->next) != NULL);
+
+	//unlock(mutex);
+
+	//didn't find any matches
+	printk_err("find_smallest_hole(): found no holes large enough (size: %x align: %d)", size, align);
+	return NULL;
 }
 
 heap_t* create_heap(uint32_t start, uint32_t end_addr, uint32_t max, uint8_t supervisor, uint8_t readonly) {
@@ -113,11 +191,8 @@ heap_t* create_heap(uint32_t start, uint32_t end_addr, uint32_t max, uint8_t sup
 	ASSERT(start % PAGE_SIZE == 0, "start wasn't page aligned");
 	ASSERT(end_addr % PAGE_SIZE == 0, "end_addr wasn't page aligned");
 
-	//initialize index
-	heap->index = array_o_place((void*)start, HEAP_INDEX_SIZE, &header_t_less_than);
-
 	//shift start address forward to resemble where we can start putting data
-	start += sizeof(type_t) * HEAP_INDEX_SIZE;
+	//start += sizeof(type_t) * HEAP_INDEX_SIZE;
 
 	//make sure start is still page aligned)
 	if ((start & 0xFFFFF000) != 0) {
@@ -132,288 +207,315 @@ heap_t* create_heap(uint32_t start, uint32_t end_addr, uint32_t max, uint8_t sup
 	heap->supervisor = supervisor;
 	heap->readonly = readonly;
 
-	//we start off with one large hole in the index
+	//we start off with one large free block
 	//this represents the whole heap at this point
-	header_t* hole = (header_t*)start;
-	hole->size = end_addr - start;
-	hole->magic = HEAP_MAGIC;
-	hole->hole = 1;
-	array_o_insert(heap->index, (void*)hole);
+	create_block(start, end_addr - start);
+
+	mutex = lock_create();
 
 	return heap;
 }
 
-// void expand(uint32_t new_size, heap_t* heap) {
-// 	//sanity check
-// 	ASSERT(new_size > heap->end_address - heap->start_address, "new_size was larger than heap");
-// 	//get nearest page boundary
-// 	if ((new_size & 0xFFFFF000) != 0) {
-// 		new_size &= 0xFFFFF000;
-// 		new_size += PAGE_SIZE;
-// 	}
-//
-// 	//make sure we're not overreaching ourselves!
-// 	ASSERT(heap->start_address + new_size <= heap->max_address, "heap would exceed max capacity");
-//
-// 	//this *should* always be on a page boundary
-// 	uint32_t old_size = heap->end_address - heap->start_address;
-// 	uint32_t i = old_size;
-// 	while (i < new_size) {
-// 	//printf_info("allocating page at %x", heap->start_address + i);
-// 		alloc_frame(get_page(heap->start_address + i, 1, kernel_directory), heap->supervisor, !heap->readonly);
-// 		i += PAGE_SIZE;
-// 	}
-// 	heap->end_address = heap->start_address + new_size;
-// }
-//
-// #pragma GCC diagnostic push
-// #pragma GCC diagnostic ignored "-Wsign-compare"
-// static uint32_t contract(int32_t new_size, heap_t* heap) {
-// 	//sanity check
-// 	ASSERT(new_size < heap->end_address - heap->start_address, "new_size was larger than heap");
-//
-// 	//get nearest page boundary
-// 	if (new_size & PAGE_SIZE) {
-// 		new_size &= PAGE_SIZE;
-// 		new_size += PAGE_SIZE;
-// 	}
-//
-// 	//don't contract too far
-// 	new_size = MAX(new_size, HEAP_MIN_SIZE);
-//
-// 	int32_t old_size = heap->end_address - heap->start_address;
-// 	int32_t i = old_size - PAGE_SIZE;
-// 	while (new_size < i) {
-// 		free_frame(get_page(heap->start_address + i, 0, current_directory == 0 ? kernel_directory : current_directory));
-// 		i -= PAGE_SIZE;
-// 	}
-// 	heap->end_address = heap->start_address + new_size;
-// 	return new_size;
-// }
-// #pragma GCC diagnostic pop
 
-void* alloc(uint32_t size, uint8_t align, heap_t* heap) {
-	//make sure we take size of header/footer into account
-	uint32_t new_size = size + sizeof(header_t) + sizeof(footer_t);
-	//find smallest hole that will fit
-	int32_t iterator = find_smallest_hole(new_size, align, heap);
+void expand(uint32_t new_size, heap_t* heap) {
+  (void)new_size;
+  (void)heap;
+	//TODO code this
+}
 
-	// if (iterator == -1) {
-	// 	//no free hole large enough was found
-  //
-	// 	//save some previous data
-	// 	uint32_t old_length = heap->end_address - heap->start_address;
-	// 	uint32_t old_end_address = heap->end_address;
-  //
-	// 	//we need to allocate more space
-	// 	expand(old_length + new_size, heap);
-	// 	uint32_t new_length = heap->end_address - heap->start_address;
-  //
-	// 	//find last header
-	// 	iterator = 0;
-	// 	//hold index of and value of endmost header found so far
-	// 	int32_t idx = -1;
-	// 	uint32_t val = 0x0;
-	// 	while (iterator < heap->index->size) {
-	// 		uint32_t tmp = (uint32_t)array_o_lookup(heap->index, iterator);
-	// 		if (tmp > val) {
-	// 			val = tmp;
-	// 			idx = iterator;
-	// 		}
-	// 		iterator++;
-	// 	}
-  //
-	// 	//if we didn't find any headers, add one
-	// 	if (idx == -1) {
-	// 		header_t* header = (header_t*)old_end_address;
-	// 		header->magic = HEAP_MAGIC;
-	// 		header->hole = 1;
-	// 		header->size = new_length - old_length;
-  //
-	// 		footer_t* footer = (footer_t*)(old_end_address + header->size - sizeof(footer_t));
-	// 		footer->magic = HEAP_MAGIC;
-	// 		footer->header = header;
-	// 		array_o_insert(heap->index, (void*)header);
-	// 	}
-	// 	else {
-	// 		//last header needs adjusting
-	// 		header_t* header = (header_t*)array_o_lookup(heap->index, idx);
-	// 		header->size += new_length - old_length;
-  //
-	// 		//rewrite footer
-	// 		footer_t* footer = (footer_t*)((uint32_t)header + header->size - sizeof(footer_t));
-	// 		footer->header = header;
-	// 		footer->magic = HEAP_MAGIC;
-	// 	}
-  //
-	// 	//we should now have enough space
-	// 	//try allocation again
-	// 	printf_info("alloc added header, retrying allocation");
-	// 	return alloc(size, align, heap);
-	// }
+uint32_t contract(int32_t new_size, heap_t* heap) {
+  (void)new_size;
+  (void)heap;
+  return -1;
+}
 
-	header_t* orig_hole_header = (header_t*)array_o_lookup(heap->index, iterator);
-	uint32_t orig_hole_pos = (uint32_t)orig_hole_header;
-	uint32_t orig_hole_size = orig_hole_header->size;
-
-	//check if we should split hole into 2 parts
-	//this is only worth it if the new hole's size is greater than the
-	//size we need to store the header and footer
-	if (orig_hole_size - new_size < sizeof(header_t) + sizeof(footer_t)) {
-		//increase size to size of hole we found
-		size += orig_hole_size - new_size;
-		new_size = orig_hole_size;
+//prints last 'display_count' alloc's in heap
+void kheap_print(heap_t* heap, int display_count) {
+	alloc_block_t* counter = first_block(heap);
+	int block_count = 0;
+	while (counter) {
+		block_count++;
+		counter = counter->next;
+	}
+	int starting_idx = 0;
+	if (block_count > display_count && display_count != -1) {
+		starting_idx = block_count - display_count;
 	}
 
-	//if it needs to be page aligned, do it now and
-	//make a new hole in front of our block
-	if (align && (orig_hole_pos & 0xFFFFF000)) {
-		uint32_t new_location = orig_hole_pos + PAGE_SIZE - (orig_hole_pos & 0xFFF) - sizeof(header_t);
-		header_t* hole_header = (header_t*)orig_hole_pos;
-		hole_header->size = PAGE_SIZE - (orig_hole_pos & 0xFFF) - sizeof(header_t);
-		hole_header->magic = HEAP_MAGIC;
-		hole_header->hole = 1;
-		footer_t* hole_footer = (footer_t*)((uint32_t)new_location - sizeof(footer_t));
-		hole_footer->magic = HEAP_MAGIC;
-		hole_footer->header = hole_header;
-		orig_hole_pos = new_location;
-		orig_hole_size = orig_hole_size - hole_header->size;
+	//advance to starting_idx
+	alloc_block_t* curr = first_block(heap);
+	for (int i = 0; i < starting_idx; i++) {
+		curr = curr->next;
+	}
+
+	printk("|-------------------------------------|\n");
+	printk("| Heap state (%d more heap items)    |\n", starting_idx);
+	printk("|------------|------------|-----------|\n");
+	printk("| addr       | size       | free      |\n");
+	printk("|------------|------------|-----------|\n");
+	while (curr) {
+		printk("| %x | %x | %s      %s|\n", (uint32_t)curr, curr->size, (curr->free) ? "free" : "used", (curr->magic == HEAP_MAGIC) ? "" : "invalid header");
+		curr = curr->next;
+	}
+	printk("|-------------------------------------|\n");
+}
+
+void heap_print(int count) {
+	kheap_print(kheap, count);
+}
+
+void heap_verify_integrity() {
+	//check heap integrity
+	alloc_block_t* tmp = first_block(kheap);
+	//search every hole
+	do {
+		if (tmp->magic != HEAP_MAGIC) {
+			printk_err("alloc() self check: block @ %x had invalid magic", (uint32_t)tmp);
+			heap_fail(tmp);
+			kernel_begin_critical();
+			while (1) {}
+		}
+	} while ((tmp = tmp->next) != NULL);
+}
+
+static void heap_expand(heap_t* heap, uint32_t expand_size) {
+
+	lock(mutex);
+
+	uint32_t curr_size = heap->end_address - heap->start_address;
+	if (curr_size + expand_size >= heap->max_address) {
+		ASSERT(0, "Heap ran out of space!\n");
+		while (1) {}
+	}
+
+	alloc_block_t* curr = first_block(heap);
+	while (curr->next) {
+		curr = curr->next;
+	}
+	if (!curr->free) {
+		uint32_t new_block_addr = (uint32_t)curr + sizeof(alloc_block_t) + curr->size;
+		printk("heap_expand() creating new block at end of heap of size %x\n", new_block_addr);
+
+		alloc_block_t* new_block = create_block(new_block_addr, (expand_size * 4));
+		insert_block(curr, new_block);
+
+		heap->end_address += sizeof(alloc_block_t) + expand_size;
 	}
 	else {
-		//we don't need this hole any more, delete it from index
-		array_o_remove(heap->index, iterator);
+		printk("heap_expand() expanding block %x from %x to %x\n", curr, curr->size, curr->size + expand_size);
+		curr->size += expand_size;
+		heap->end_address += expand_size;
 	}
 
-	//overwrite original header
-	header_t* block_header = (header_t*)orig_hole_pos;
-	block_header->magic = HEAP_MAGIC;
-	block_header->hole = 0;
-	block_header->size = new_size;
-	//and overwrite footer
-	footer_t* block_footer = (footer_t*)(orig_hole_pos + sizeof(header_t) + size);
-	block_footer->magic = HEAP_MAGIC;
-	block_footer->header = block_header;
+	unlock(mutex);
+}
 
-	//we might have to write a new hole after the allocated block
-	//only do this if the new hole would have a positive size after
-	//subtracting size needed for header and footer
-	if (orig_hole_size - new_size > 0) {
-		header_t* hole_header = (header_t*)(orig_hole_pos + sizeof(header_t) + size + sizeof(footer_t));
-		hole_header->magic = HEAP_MAGIC;
-		hole_header->hole = 1;
-		hole_header->size = orig_hole_size - new_size;
+//reserve heap block with size >= 'size'
+//will page align block if 'align'
+void* alloc(uint32_t size, uint8_t align, heap_t* heap) {
 
-		footer_t* hole_footer = (footer_t*)((uint32_t)hole_header + orig_hole_size - new_size - sizeof(footer_t));
-		if ((uint32_t)hole_footer < heap->end_address) {
-			hole_footer->magic = HEAP_MAGIC;
-			hole_footer->header = hole_header;
+	//find smallest hole that will fit
+	alloc_block_t* candidate = find_smallest_hole(size, align, heap);
+	//printk_info("alloc(): candidate @ %x [%x bytes]", (uint32_t)candidate, candidate->size);
+
+	//handle if we couldn't find a candidate block
+	if (!candidate) {
+		//expand heap
+		//TODO fill in
+		//ASSERT(0, "alloc() %x bytes failed, find_smallest_hole() had no candidates\n");
+		uint32_t curr_size = heap->end_address - heap->start_address;
+		uint32_t expand_size = curr_size + size;
+		printk("Heap could not fit alloc %x, expanding size by %x\n", size, expand_size);
+		heap_expand(heap, expand_size);
+		//heap should now have enough space, try alloc again
+		return alloc(size, align, heap);
+	}
+
+	lock(mutex);
+
+	//check if block should be split into 2 blocks
+	//only worth it if the size of the second block will be greater than at least a block header
+	if (candidate->size - size > sizeof(alloc_block_t) + MIN_BLOCK_SIZE) {
+		//create second block
+		uint32_t split_block = (uint32_t)candidate + sizeof(alloc_block_t) + size;
+		uint32_t split_size = candidate->size - size - sizeof(alloc_block_t);
+
+		//printk_info("alloc(): candidate can be split into second block @ %x [%x bytes]", split_block, split_size);
+		create_block(split_block, split_size);
+
+		//insert new block into linked list
+		insert_block(candidate, (alloc_block_t*)split_block);
+
+		if (candidate->next != (alloc_block_t*)split_block || ((alloc_block_t*)split_block)->prev != candidate) {
+			printk_err("Heap insertion failed!");
+			heap_fail(candidate);
+			while (1) {}
 		}
 
-		//put new hole in index
-		array_o_insert(heap->index, (void*)hole_header);
+		//printk("alloc() candidate: %x split_block: %x\n", candidate, split_block);
+
+		//shrink block we just split in two
+		candidate->size = size;
 	}
 
 	//add this allocation to used memory
 	used_bytes += size;
 
-	return (void*)((uint32_t)block_header + sizeof(header_t));
+	//candidate is now in use
+	candidate->free = false;
+
+	//start off by clearing this block
+	uint32_t* ptr = (uint32_t*)((uint32_t)candidate + sizeof(alloc_block_t));
+	memset(ptr, 0, candidate->size);
+
+	unlock(mutex);
+
+	return (void*)((uint32_t)candidate + sizeof(alloc_block_t));
 }
 
-void free(void* p, heap_t* heap) {
-	if (p == 0) return;
+//merge two contiguous heap blocks if both are free
+//left and right _must_ be immediately adjacent, in that order
+bool merge_blocks(alloc_block_t* left, alloc_block_t* right) {
+	//make sure both blocks are free
+	if (!left->free || !right->free) {
+		return false;
+	}
+	//ensure left is smaller than right
+	if (left > right) {
+		printk_err("merge_blocks(): left was larger than right!");
+		return false;
+	}
+	//ensure these blocks are adjacent
+	if (left->next != right) {
+		printk_err("merge_blocks(): left->next was %x, not %x", left->next, right);
+		return false;
+	}
 
-	//get header and footer associated with this pointer
-	header_t* header = (header_t*)((uint32_t)p - sizeof(header_t));
-	footer_t* footer = (footer_t*)((uint32_t)header + header->size - sizeof(footer_t));
+	lock(mutex);
+
+	//ready to merge
+	//increase left block by size of right block and right block's header
+	left->size += right->size + sizeof(alloc_block_t);
+	//remove right from list
+	left->next = right->next;
+	left->next->prev = left;
+
+	//printk_info("merge_blocks() merged block %x into %x", right, left);
+	//all done
+	unlock(mutex);
+
+	return true;
+}
+
+//unreserve heap block which points to p
+//also, attempts to re-merge free blocks in heap
+void free(void* p, heap_t* heap) {
+	if (p == 0) {
+		return;
+	}
+
+  (void)heap;
+
+	//get header associated with this pointer
+	alloc_block_t* header = (alloc_block_t*)((uint32_t)p - sizeof(alloc_block_t));
+	//printk_dbg("kfree() %x [%x]", header, header->size);
 
 	//ensure these are valid
-	ASSERT(header->magic == HEAP_MAGIC, "invalid header magic in %x", p);
-	ASSERT(footer->magic == HEAP_MAGIC, "invalid footer magic in %x", p);
+	//ASSERT(header->magic == HEAP_MAGIC, "invalid header magic in %x (got %x)", p, header->magic);
+	if (header->magic != HEAP_MAGIC) {
+		printk_err("free() invalid block @ %x", header);
+		heap_fail(header);
+		while (1) {}
+	}
+
+	lock(mutex);
 
 	//we're about to free this memory, untrack it from used memory
 	used_bytes -= header->size;
 
 	//turn this into a hole
-	header->hole = 1;
+	header->free = true;
 
-	//determine if we should add this header into free holes index
-	char add = 1;
-
-	//attempt merge left
-	//if thing to left of us is a footer...
-	footer_t* test_footer = (footer_t*)((uint32_t)header - sizeof(footer_t));
-	if (test_footer->magic == HEAP_MAGIC && test_footer->header->hole) {
-		uint32_t cache_size = header->size; //cache current size
-		header = test_footer->header; //rewrite header with new one
-		footer->header = header; //rewrite footer to point to new header
-		header->size += cache_size; //change size
-		add = 0; //since header is already in index, don't add it again
+	//attempt to merge with previous block
+	if (header->prev) {
+		merge_blocks(header->prev, header);
+	}
+	//attempt to merge with next block
+	if (header->next) {
+		merge_blocks(header, header->next);
 	}
 
-	//attempt merge right
-	//if thing to right of us is a header...
-	header_t* test_header = (header_t*)((uint32_t)footer + sizeof(footer_t));
-	if (test_header->magic == HEAP_MAGIC && test_header->hole) {
-		//header->size += test_header->size; //increase size to fit merged hole
-		//test_footer = (footer_t*)((uint32_t)test_header + test_header->size - sizeof(footer_t)); //rewrite its footer to point to our header
-		//footer = test_footer;
+	unlock(mutex);
+	//TODO contract if this block is at end of heap space
+}
 
-		//find and remove this header from index
-		uint32_t iterator = 0;
-		while ((iterator < heap->index->size) && (array_o_lookup(heap->index, iterator) != (void*)test_header)) {
-			iterator++;
-		}
+#define MAX_FILES 256
+#define MAX_FILENAME 64
+//array of filenames using kmalloc
+static char kmalloc_users[MAX_FILES][MAX_FILENAME];
+//array of bytes used by each file corresponding to kmalloc_users
+static int kmalloc_users_used[MAX_FILES];
+//keep track of current amount of users in array
+static int current_filecount = 0;
+void kmalloc_track_int(char* file, int line, uint32_t size) {
+	//if this is first run, memset arrays
+	if (!current_filecount) {
+		memset(kmalloc_users, 0, sizeof(kmalloc_users));
+		memset(kmalloc_users_used, 0, sizeof(kmalloc_users_used));
+	}
+	//are we about to exceed array bounds?
+	if (current_filecount + 1 >= MAX_FILES) {
+		printk("kmalloc_track_int() exceeds array\n");
+		while (1) {}
+	}
 
-		//ensure we actually found the item
-		ASSERT(iterator < heap->index->size, "couldn't find item!");
+	//search if this file is already in users
+	char* line_tmp = 0;
+	int idx = -1;
+	for (int i = 0; i < current_filecount; i++) {
+		line_tmp = (char*)kmalloc_users[i];
 
-		//header is fake, delete it and process as if there was nothing
-		if (iterator > heap->index->size) {
-			//delete fake header
-			test_header->magic = 0;
-			test_header->hole = 1;
-		}
-		else {
-			//everything was normal
-			//increase size
-			header->size += test_header->size;
-			test_footer = (footer_t*)((uint32_t)test_header + test_header->size - sizeof(footer_t));
-			footer = test_footer;
-			//remove it
-			array_o_remove(heap->index, iterator);
+		//is this a match?
+		if (strcmp(file, line_tmp) == 0) {
+			idx = i;
+			break;
 		}
 	}
 
-	//if footer location is the end address, we can contract
-	// if ((uint32_t)footer + sizeof(footer_t) == heap->end_address) {
-	// 	uint32_t old_length = heap->end_address - heap->start_address;
-	// 	uint32_t new_length = contract((uint32_t)header - heap->start_address, heap);
-	// 	//check how big we'll be after resizing
-	// 	if (header->size - (old_length - new_length) > 0) {
-	// 		//we still exist, so resize us
-	// 		header->size -= old_length - new_length;
-	// 		footer = (footer_t*)((uint32_t)header + header->size - sizeof(footer_t));
-	// 		footer->magic = HEAP_MAGIC;
-	// 		footer->header = header;
-	// 	}
-	// 	else {
-	// 		//we no longer exist
-	// 		//remove us from index
-	// 		uint32_t iterator = 0;
-	// 		while ((iterator < heap->index->size) && (array_o_lookup(heap->index, iterator) != (void*)test_header)) {
-	// 			iterator++;
-	// 		}
-  //
-	// 		//if we didn't find ourselves, we have nothing to remove
-	// 		if (iterator < heap->index->size) {
-	// 			array_o_remove(heap->index, iterator);
-	// 		}
-	// 	}
-	// }
-
-	if (add == 1) {
-		array_o_insert(heap->index, (void*)header);
+	//did this user already exist?
+	if (idx == -1) {
+		idx = current_filecount;
+		strcpy(kmalloc_users[current_filecount++], file);
 	}
+	kmalloc_users_used[idx] += size;
+  (void)line;
+}
+
+void memdebug() {
+	//find length of longest filename
+	int longest_len = 0;
+	for (int i = 0; i < current_filecount; i++) {
+		int curr_len = strlen(kmalloc_users[i]);
+		longest_len = MAX(longest_len, curr_len);
+	}
+
+	printk("\n---memdebug---\n");
+	for (int i = 0; i < current_filecount; i++) {
+		//print filename
+		printk("%s:", kmalloc_users[i]);
+
+		//print out some spaces
+		//# of spaces is the difference between this filename's length and the
+		//longest filename's length
+		//this is so the output is aligned in syslog
+		int diff = longest_len - strlen(kmalloc_users[i]);
+		for (int j = 0; j < diff; j++) {
+			printk(" ");
+		}
+
+		printk(" %x bytes\n", kmalloc_users_used[i]);
+	}
+	printk("--------------\n");
 }
 
 uint32_t used_mem() {

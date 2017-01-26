@@ -17,7 +17,7 @@ AS = i686-pc-useless-as
 CFLAGS  = -O2 -std=c99
 CFLAGS += -finline-functions -ffreestanding
 CFLAGS += -Wall -Wextra -Wno-unused-function -Wno-unused-parameter -Wno-format
-CFLAGS += -pedantic -fno-omit-frame-pointer
+CFLAGS += -fno-omit-frame-pointer
 CFLAGS += -D_KERNEL_
 
 ASFLAGS = --32
@@ -116,7 +116,7 @@ VID_QEM :=
 START_VGA = start=--vga
 START_SINGLE = start=--single
 START_LIVE = start=live-welcome
-WITH_LOGS = logtoserial=1
+WITH_LOGS = -S -s 
 
 .PHONY: all system install test toolchain userspace modules cdrom uselessos.iso cdrom-big uselessos-big.iso
 .PHONY: clean clean-soft clean-hard clean-user clean-mods clean-core clean-disk clean-once
@@ -305,7 +305,7 @@ tags: src/kernel/*.c
 clean-soft:
 	@${BEGRM} "RM" "Cleaning kernel objects..."
 	@-rm -f src/kernel/*.o
-	@-rm -f src/kernel/*/*.o
+	@-rm -f src/kernel/*/*/*.o
 	@-rm -f ${KERNEL_OBJS}
 	@${ENDRM} "RM" "Cleaned kernel objects"
 
